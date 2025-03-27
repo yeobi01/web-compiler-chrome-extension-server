@@ -19,10 +19,9 @@ public class CompileService {
 
     public CompileDTO.CompileResponse compile(CompileDTO.CompileRequest compileRequest) throws IOException, InterruptedException {
         Path tempDir = Files.createTempDirectory("code-run");
-
         String filename = UUID.randomUUID().toString();
-        File sourceFile = new File(tempDir.toFile() + filename + ".cpp");
-        File binaryFile = new File(tempDir.toFile() + filename);
+        File sourceFile = new File(tempDir.toFile(), filename + ".cpp");
+        File binaryFile = new File(tempDir.toFile(), filename);
 
         Files.write(sourceFile.toPath(), compileRequest.getCode().getBytes());
 
@@ -32,31 +31,49 @@ public class CompileService {
 
         String compileOutput = readProcessOutput(compileProcess.getInputStream());
         int compileExitCode = compileProcess.waitFor();
-        if(compileExitCode != 0){
+
+        if (compileExitCode != 0) {
             cleanup(sourceFile, binaryFile);
-            return new CompileDTO.CompileResponse("Compile Error", compileOutput);
+            return new CompileDTO.CompileResponse(null, compileOutput, true);
         }
 
-        Process runProcess = new ProcessBuilder(binaryFile.getAbsolutePath())
-                .redirectErrorStream(true)
-                .start();
+        CompileDTO.Input[] inputs = compileRequest.getInputs();
+        CompileDTO.Output[] outputs = new CompileDTO.Output[inputs.length];
 
-        try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(runProcess.getOutputStream()))) {
-            writer.write(compileRequest.getInput());
-            writer.flush();
+        for (int i = 0; i < inputs.length; i++) {
+            Process runProcess = new ProcessBuilder(binaryFile.getAbsolutePath())
+                    .redirectErrorStream(true)
+                    .start();
+
+            try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(runProcess.getOutputStream()))) {
+                writer.write(inputs[i].getInput());
+                writer.flush();
+            }
+
+            String realOutput = readProcessOutput(runProcess.getInputStream()).trim();
+            int runExitCode = runProcess.waitFor();
+
+            String executionOutput = realOutput;
+            if (runExitCode != 0) {
+                executionOutput = "실행 중 에러:\n" + realOutput;
+            }
+
+            String expectedOutput = inputs[i].getExpectedOutput().trim();
+            boolean result = expectedOutput.equals(realOutput);
+
+            outputs[i] = new CompileDTO.Output(
+                    executionOutput,
+                    expectedOutput,
+                    realOutput,
+                    result
+            );
         }
-
-        String executionOutput = readProcessOutput(runProcess.getInputStream());
-        int runExitCode = runProcess.waitFor();
 
         cleanup(sourceFile, binaryFile);
 
-        if (runExitCode != 0) {
-            return new CompileDTO.CompileResponse("실행 중 에러:\n" + executionOutput, null);
-        }
-
-        return new CompileDTO.CompileResponse(executionOutput, null);
+        return new CompileDTO.CompileResponse(outputs, null, false);
     }
+
     private String readProcessOutput(InputStream inputStream) throws IOException {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
             StringBuilder sb = new StringBuilder();
@@ -73,7 +90,6 @@ public class CompileService {
             if (file.exists()) file.delete();
         }
     }
-
 }
 
 // g++ Main.cc -o Main -O2 -Wall -lm -static -std=gnu++17 -DONLINE_JUDGE -DBOJ
