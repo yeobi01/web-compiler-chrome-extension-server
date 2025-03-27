@@ -24,7 +24,7 @@ public class CompileDTO {
     @Getter
     @AllArgsConstructor
     public static class Output{
-        private String output;
+        private String input;
         private String expectedOutput;
         private String realOutput;
         private Boolean result;
