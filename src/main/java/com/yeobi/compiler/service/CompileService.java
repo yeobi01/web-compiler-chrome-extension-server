@@ -52,17 +52,15 @@ public class CompileService {
 
             String realOutput = readProcessOutput(runProcess.getInputStream()).trim();
             int runExitCode = runProcess.waitFor();
-
-            String executionOutput = realOutput;
             if (runExitCode != 0) {
-                executionOutput = "실행 중 에러:\n" + realOutput;
+                realOutput = "실행 중 에러:\n" + realOutput;
             }
 
             String expectedOutput = inputs[i].getExpectedOutput().trim();
             boolean result = expectedOutput.equals(realOutput);
 
             outputs[i] = new CompileDTO.Output(
-                    executionOutput,
+                    inputs[i].getInput(),
                     expectedOutput,
                     realOutput,
                     result
